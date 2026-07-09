@@ -1,0 +1,29 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Секреты
+*.auto.tfvars
+terraform.tfvars
+*.tfvars.json
+.env
+.env.*
+
+# SSH
+.ssh/
+*.pem
+
+# OS / редактор
+.DS_Store
+Thumbs.db
+*.swp
+*~
+*.bak
+*.tf.[0-9]*

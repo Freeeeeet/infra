@@ -1,0 +1,31 @@
+---
+- name: Разворачивание gitlab
+  hosts: gitlab
+  become: true
+  vars:
+    external_url: "https://gitlab.jija-thecat.space"
+
+  tasks:
+    - name: Установка зависимостей
+      ansible.builtin.apt:
+        name: [curl, openssh-server, ca-certificates, tzdata, perl]
+        state: present
+        update_cache: true
+
+    - name: Add gitlab repo
+      ansible.builtin.shell: >
+        curl -sS https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+      args:
+        creates: /etc/apt/sources.list.d/gitlab_gitlab-ce.list
+
+    - name: Обновление apt пакетов
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Установка gitlab-ce
+      ansible.builtin.apt:
+        name: gitlab-ce
+        state: present
+        update_cache: true
+      environment:
+        EXTERNAL_URL: "{{ external_url }}"

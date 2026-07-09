@@ -1,0 +1,8 @@
+users:
+  - name: tf-user
+    groups: sudo
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys: 
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDYBVUQRz+vKGYRB07497JbSMD9BWOK94ftz4sTETRvh2IgyzDlPK3+5JTByWqdBOMc+HYzlGj+1EYAlupDssJ2jY5+wXF7MnB5r62iXc8Z68s42dHKDxoW1y7EiGDKQetyyLJ/2VOKB0GHyPp+ReE0g9dg4IdqH8yffLodskMwrHcoYng9tzLGkAjkhnQ+t9zDwcnUCTORESBIUocRFx5Tg6fuZjQ5ZZrfTp/fegd+AMzC1WatyvGtx3JlGZfKGHxaglDTL+OCLPXg3U64LDRiTWiqa55zOOndUkWIevoh6a+Pjr4NuneXcWOfpnlA4DJ7un27N+7HkJ2VDBMBFZISW1G4N5Kdbeur0JUrD+9IRFBzzp+f2cLa2g0WU7XJanqQ5MoO1viQBm1fHfdgKJVQ8bQNiLWyD9VS9jtLOxCOoOqWbNNFMi+VdC5I7IzAz/XukQnNvI3t9sd4HJsb0TzDxPSZYaZcgEkuCpYxSF+7Hb23xF10vUlLrNDkhDxS/EHB8to8n//taE75fYJith/+WZXM+iuExfT+hoM6CJpyjR7P+j7Sl3gYfDDmRANg3ySbT6XycFCf8Dl/OlCs9K503pOkgjkwpqTtY/USoZw8eEXPDaBaVIVQw+Fe+eRLVp6wYzDaMxmO9H3Gh2MQTWuag2/Ko83m6YPhaPPPw8CiTw== tf-key
+
