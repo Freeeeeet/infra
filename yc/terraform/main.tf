@@ -27,15 +27,15 @@ module "toronto" {
   disk_auto_delete   = false
 }
 
-# module "winnipeg" {
-#   source             = "./modules/vm"
-#   name               = "winnipeg"
-#   subnet_id          = yandex_vpc_subnet.default_subnet.id
-#   image_id           = var.image_id
-#   disk_size          = var.disk_size
-#   disk_type          = var.disk_type
-#   cores              = var.cores
-#   memory             = var.memory
-#   user_data          = file("${path.module}/cloud_ssh_user_data")
-#   security_group_ids = [yandex_vpc_security_group.web.id]
-# }
+module "winnipeg" {
+  source             = "./modules/vm"
+  name               = "winnipeg"
+  subnet_id          = yandex_vpc_subnet.default_subnet.id
+  image_id           = var.image_id
+  disk_size          = var.disk_size
+  disk_type          = var.disk_type
+  cores              = var.cores
+  memory             = var.memory
+  user_data          = file("${path.module}/cloud_ssh_user_data")
+  security_group_ids = [yandex_vpc_security_group.web.id]
+}
