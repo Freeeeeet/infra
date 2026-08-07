@@ -4,7 +4,7 @@ locals {
       vm_id      = 202
       ip_address = "192.168.1.200/24"
       cores      = 2
-      memory     = 2048
+      memory     = 4096
       disk_size  = 30
       tags       = ["k3s", "master"]
     }

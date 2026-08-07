@@ -1,0 +1,91 @@
+---
+- name: Установка k3s server
+  hosts: k3s_server
+  become: true
+
+  tasks:
+    - name: Установка curl
+      ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+
+    - name: Скачивание установщика k3s
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/install-k3s.sh
+        mode: "0755"
+
+    - name: Установка k3s
+      ansible.builtin.command:
+        cmd: /tmp/install-k3s.sh
+        creates: /usr/local/bin/k3s
+      environment:
+        INSTALL_K3S_EXEC: server
+
+    - name: Запуск и включение сервиса k3s
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+
+    - name: Получение токена для подключения воркеров
+      ansible.builtin.command:
+        cmd: cat /var/lib/rancher/k3s/server/node-token
+      register: k3s_node_token
+      changed_when: false
+      no_log: true
+
+    - name: Ожидание Kubernetes API
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: 6443
+        delay: 2
+        timeout: 60
+
+    - name: Проверка состояния Kubernetes node
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes
+      register: k3s_nodes
+      changed_when: false
+
+    - name: Показать Kubernetes nodes
+      ansible.builtin.debug:
+        var: k3s_nodes.stdout_lines
+
+- name: Подключение воркеров к k3s
+  hosts: k3s_agents
+  become: true
+
+  vars:
+    k3s_server_host: "{{ hostvars[groups['k3s_server'][0]].ansible_host }}"
+    k3s_token: "{{ hostvars[groups['k3s_server'][0]].k3s_node_token.stdout }}"
+
+  tasks:
+    - name: Установка curl
+      ansible.builtin.apt:
+        name: curl
+        state: present
+        update_cache: true
+
+    - name: Скачивание установщика k3s
+      ansible.builtin.get_url:
+        url: https://get.k3s.io
+        dest: /tmp/install-k3s.sh
+        mode: "0755"
+
+    - name: Установка k3s agent
+      ansible.builtin.command:
+        cmd: /tmp/install-k3s.sh
+        creates: /usr/local/bin/k3s
+      environment:
+        K3S_URL: "https://{{ k3s_server_host }}:6443"
+        K3S_TOKEN: "{{ k3s_token }}"
+        INSTALL_K3S_EXEC: agent
+      no_log: true
+
+    - name: Запуск и включение k3s agent
+      ansible.builtin.systemd:
+        name: k3s-agent
+        enabled: true
+        state: started
