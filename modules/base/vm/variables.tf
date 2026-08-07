@@ -76,3 +76,14 @@ variable "snippets_datastore_id" {
   type    = string
   default = "local"
 }
+
+variable "extra_disks" {
+  type = list(object({
+    interface    = string
+    size         = number
+    datastore_id = optional(string)
+    backup       = optional(bool, true)
+  }))
+
+  default = []
+}

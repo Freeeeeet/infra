@@ -55,6 +55,24 @@ resource "proxmox_virtual_environment_vm" "this" {
     size         = var.disk_size
   }
 
+  dynamic "disk" {
+    for_each = var.extra_disks
+    iterator = extra_disk
+
+    content {
+      datastore_id = coalesce(
+        try(extra_disk.value.datastore_id, null),
+        var.datastore_id
+      )
+
+      interface = extra_disk.value.interface
+      size      = extra_disk.value.size
+      backup    = extra_disk.value.backup
+      iothread  = true
+      discard   = "on"
+    }
+  }
+
   network_device {
     bridge = var.bridge
   }

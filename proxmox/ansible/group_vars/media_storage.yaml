@@ -1,0 +1,18 @@
+---
+media_filesystem_uuid: "8d8b7c4a-b1d4-4413-a09d-ab337c14e519"
+media_mount_point: /data
+
+media_group: media
+media_gid: 2000
+
+nfs_allowed_network: "192.168.1.0/24"
+
+media_directories:
+  - downloads
+  - downloads/incomplete
+  - downloads/movies
+  - downloads/tv
+  - media
+  - media/movies
+  - media/tv
+  - media/music

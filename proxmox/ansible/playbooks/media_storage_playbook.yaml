@@ -1,0 +1,204 @@
+---
+- name: Настройка NFS-сервера для медиатеки
+  hosts: media_storage
+  become: true
+
+  tasks:
+    - name: Найти устройство по UUID
+      ansible.builtin.command:
+        cmd: "blkid -U {{ media_filesystem_uuid }}"
+      register: media_device_lookup
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Проверить наличие файловой системы
+      ansible.builtin.assert:
+        that:
+          - media_device_lookup.rc == 0
+          - media_device_lookup.stdout | trim | length > 0
+        fail_msg: >-
+          Файловая система с UUID {{ media_filesystem_uuid }} не найдена.
+
+    - name: Получить тип файловой системы
+      ansible.builtin.command:
+        cmd: "blkid -o value -s TYPE {{ media_device_lookup.stdout | trim }}"
+      register: media_filesystem_type
+      changed_when: false
+      check_mode: false
+
+    - name: Проверить тип файловой системы
+      ansible.builtin.assert:
+        that:
+          - media_filesystem_type.stdout | trim == "ext4"
+        fail_msg: >-
+          На {{ media_device_lookup.stdout | trim }} обнаружена файловая система
+          {{ media_filesystem_type.stdout | trim }}, ожидалась ext4.
+
+    - name: Найти существующую точку монтирования
+      ansible.builtin.command:
+        cmd: "findmnt -rn --source UUID={{ media_filesystem_uuid }} --output TARGET"
+      register: media_existing_mount
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Проверить существующую точку монтирования
+      ansible.builtin.assert:
+        that:
+          - >-
+            media_existing_mount.stdout | trim == ""
+            or media_existing_mount.stdout | trim == media_mount_point
+        fail_msg: >-
+          Файловая система уже смонтирована в
+          {{ media_existing_mount.stdout | trim }}, ожидалось {{ media_mount_point }}.
+
+    - name: Найти группу по GID
+      ansible.builtin.command:
+        cmd: "getent group {{ media_gid }}"
+      register: media_gid_lookup
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Проверить владельца GID
+      ansible.builtin.assert:
+        that:
+          - media_gid_lookup.stdout.split(':')[0] == media_group
+        fail_msg: >-
+          GID {{ media_gid }} уже занят другой группой:
+          {{ media_gid_lookup.stdout }}.
+      when: media_gid_lookup.rc == 0
+
+    - name: Найти существующую группу media
+      ansible.builtin.command:
+        cmd: "getent group {{ media_group }}"
+      register: media_group_lookup
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Проверить GID существующей группы media
+      ansible.builtin.assert:
+        that:
+          - media_group_lookup.stdout.split(':')[2] | int == media_gid
+        fail_msg: >-
+          Группа {{ media_group }} уже существует с GID
+          {{ media_group_lookup.stdout.split(':')[2] }}, ожидался {{ media_gid }}.
+      when: media_group_lookup.rc == 0
+
+    - name: Установить NFS-сервер
+      ansible.builtin.apt:
+        name: nfs-kernel-server
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Создать группу media
+      ansible.builtin.group:
+        name: "{{ media_group }}"
+        gid: "{{ media_gid }}"
+        state: present
+
+    - name: Смонтировать медиадиск
+      ansible.posix.mount:
+        path: "{{ media_mount_point }}"
+        src: "UUID={{ media_filesystem_uuid }}"
+        fstype: ext4
+        opts: defaults,noatime
+        dump: "0"
+        passno: "2"
+        state: mounted
+
+    - name: Настроить права каталога data
+      ansible.builtin.file:
+        path: "{{ media_mount_point }}"
+        state: directory
+        owner: root
+        group: "{{ media_group }}"
+        mode: "2775"
+
+    - name: Создать каталоги медиастека
+      ansible.builtin.file:
+        path: "{{ media_mount_point }}/{{ item }}"
+        state: directory
+        owner: root
+        group: "{{ media_group }}"
+        mode: "2775"
+      loop: "{{ media_directories }}"
+
+    - name: Создать каталог конфигурации NFS
+      ansible.builtin.file:
+        path: /etc/exports.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Настроить NFS export
+      ansible.builtin.copy:
+        dest: /etc/exports.d/media.exports
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          {{ media_mount_point }} {{ nfs_allowed_network }}(rw,sync,no_subtree_check,root_squash)
+
+    - name: Включить и запустить NFS-сервер
+      ansible.builtin.systemd:
+        name: nfs-kernel-server
+        enabled: true
+        state: started
+
+    - name: Применить конфигурацию NFS exports
+      ansible.builtin.command:
+        cmd: exportfs -ra
+      changed_when: false
+      when: not ansible_check_mode
+
+    - name: Проверить итоговую конфигурацию
+      when: not ansible_check_mode
+      block:
+        - name: Проверить монтирование медиадиска
+          ansible.builtin.command:
+            cmd: >-
+              findmnt --noheadings --output SOURCE,FSTYPE,TARGET
+              --mountpoint {{ media_mount_point }}
+          register: media_mount_check
+          changed_when: false
+
+        - name: Проверить параметры монтирования
+          ansible.builtin.assert:
+            that:
+              - '"ext4" in media_mount_check.stdout'
+              - media_mount_point in media_mount_check.stdout
+            fail_msg: >-
+              Точка {{ media_mount_point }} смонтирована не так, как ожидалось:
+              {{ media_mount_check.stdout }}.
+
+        - name: Получить активные NFS exports
+          ansible.builtin.command:
+            cmd: exportfs -v
+          register: media_exports_check
+          changed_when: false
+
+        - name: Проверить NFS export
+          ansible.builtin.assert:
+            that:
+              - media_mount_point in media_exports_check.stdout
+              - nfs_allowed_network in media_exports_check.stdout
+            fail_msg: >-
+              NFS export для {{ media_mount_point }} не найден:
+              {{ media_exports_check.stdout }}.
+
+        - name: Проверить состояние NFS-сервера
+          ansible.builtin.command:
+            cmd: systemctl is-active nfs-kernel-server
+          register: media_nfs_service_check
+          changed_when: false
+
+        - name: Проверить запуск NFS-сервера
+          ansible.builtin.assert:
+            that:
+              - media_nfs_service_check.stdout | trim == "active"
+            fail_msg: Сервис nfs-kernel-server не активен.
