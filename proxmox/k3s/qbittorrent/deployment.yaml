@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: qbittorrent
+  namespace: jellyfin
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: qbittorrent
+
+  template:
+    metadata:
+      labels:
+        app: qbittorrent
+
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+
+      securityContext:
+        fsGroup: 2000
+        fsGroupChangePolicy: OnRootMismatch
+
+      containers:
+        - name: qbittorrent
+          image: lscr.io/linuxserver/qbittorrent:latest
+
+          env:
+            - name: PUID
+              value: "2000"
+
+            - name: PGID
+              value: "2000"
+
+            - name: TZ
+              value: Europe/Moscow
+
+            - name: WEBUI_PORT
+              value: "8080"
+
+            - name: TORRENTING_PORT
+              value: "6881"
+
+            - name: UMASK
+              value: "002"
+
+          ports:
+            - name: web
+              containerPort: 8080
+              protocol: TCP
+
+            - name: bittorrent-tcp
+              containerPort: 6881
+              protocol: TCP
+
+            - name: bittorrent-udp
+              containerPort: 6881
+              protocol: UDP
+
+          volumeMounts:
+            - name: config
+              mountPath: /config
+
+            - name: media
+              mountPath: /data
+
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: qbittorrent-config
+
+        - name: media
+          persistentVolumeClaim:
+            claimName: media

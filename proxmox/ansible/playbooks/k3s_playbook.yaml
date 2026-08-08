@@ -4,11 +4,16 @@
   become: true
 
   tasks:
-    - name: Установка curl
+    - name: Установка системных пакетов
       ansible.builtin.apt:
-        name: curl
+        name:
+          - curl
+          - nfs-common
         state: present
         update_cache: true
+        cache_valid_time: 3600
+      tags:
+        - packages
 
     - name: Скачивание установщика k3s
       ansible.builtin.get_url:
@@ -62,11 +67,16 @@
     k3s_token: "{{ hostvars[groups['k3s_server'][0]].k3s_node_token.stdout }}"
 
   tasks:
-    - name: Установка curl
+    - name: Установка системных пакетов
       ansible.builtin.apt:
-        name: curl
+        name:
+          - curl
+          - nfs-common
         state: present
         update_cache: true
+        cache_valid_time: 3600
+      tags:
+        - packages
 
     - name: Скачивание установщика k3s
       ansible.builtin.get_url:
