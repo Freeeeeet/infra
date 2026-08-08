@@ -18,6 +18,15 @@ locals {
       ip_address = "192.168.1.176/24"
       cores      = 1
       memory     = 512
+    },
+    proxy-xray = {
+      vm_id      = 101
+      ip_address = "192.168.1.177/24"
+      cores      = 1
+      memory     = 512
+      disk_size  = 8
+      tags       = ["proxy", "xray", "managed-by-terraform"]
+      nesting    = true
     }
 
   }

@@ -1,0 +1,265 @@
+---
+- name: Настройка локального Xray proxy gateway
+  hosts: proxy_xray
+  become: true
+
+  vars:
+    xray_version: v26.7.28
+    xray_release_asset: Xray-linux-64.zip
+    xray_release_url: "https://github.com/XTLS/Xray-core/releases/download/{{ xray_version }}/{{ xray_release_asset }}"
+    xray_archive_path: "/tmp/{{ xray_version }}-{{ xray_release_asset }}"
+    xray_digest_path: "{{ xray_archive_path }}.dgst"
+    xray_extract_directory: "/tmp/xray-{{ xray_version }}"
+    xray_binary_path: /usr/local/bin/xray
+    xray_share_directory: /usr/local/share/xray
+    xray_config_directory: /usr/local/etc/xray
+    xray_config_path: /usr/local/etc/xray/config.json
+
+    xray_socks_listen: "192.168.1.177"
+    xray_socks_port: 1080
+
+  handlers:
+    - name: Перезапустить Xray
+      ansible.builtin.systemd:
+        name: xray
+        state: restarted
+        daemon_reload: true
+
+  tasks:
+    - name: Установить системные зависимости
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - unzip
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Скачать архив Xray из официального release
+      ansible.builtin.get_url:
+        url: "{{ xray_release_url }}"
+        dest: "{{ xray_archive_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Скачать контрольную сумму официального release
+      ansible.builtin.get_url:
+        url: "{{ xray_release_url }}.dgst"
+        dest: "{{ xray_digest_path }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Рассчитать SHA-256 скачанного архива
+      ansible.builtin.stat:
+        path: "{{ xray_archive_path }}"
+        checksum_algorithm: sha256
+      register: xray_archive_checksum
+
+    - name: Прочитать официальную контрольную сумму
+      ansible.builtin.slurp:
+        src: "{{ xray_digest_path }}"
+      register: xray_official_digest
+
+    - name: Проверить SHA-256 архива Xray
+      ansible.builtin.assert:
+        that:
+          - >-
+            xray_archive_checksum.stat.checksum
+            in (xray_official_digest.content | b64decode)
+        fail_msg: >-
+          SHA-256 архива {{ xray_release_asset }} не совпадает
+          с контрольной суммой официального release {{ xray_version }}.
+
+    - name: Создать временный каталог распаковки Xray
+      ansible.builtin.file:
+        path: "{{ xray_extract_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Распаковать архив Xray
+      ansible.builtin.unarchive:
+        src: "{{ xray_archive_path }}"
+        dest: "{{ xray_extract_directory }}"
+        remote_src: true
+        creates: "{{ xray_extract_directory }}/xray"
+
+    - name: Установить бинарник Xray
+      ansible.builtin.copy:
+        src: "{{ xray_extract_directory }}/xray"
+        dest: "{{ xray_binary_path }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Перезапустить Xray
+
+    - name: Создать каталог данных Xray
+      ansible.builtin.file:
+        path: "{{ xray_share_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Установить geodata Xray
+      ansible.builtin.copy:
+        src: "{{ xray_extract_directory }}/{{ item }}"
+        dest: "{{ xray_share_directory }}/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - geoip.dat
+        - geosite.dat
+      notify: Перезапустить Xray
+
+    - name: Проверить наличие Xray
+      ansible.builtin.stat:
+        path: "{{ xray_binary_path }}"
+      register: xray_binary
+
+    - name: Убедиться, что Xray установлен
+      ansible.builtin.assert:
+        that:
+          - xray_binary.stat.exists
+          - xray_binary.stat.executable
+        fail_msg: >-
+          Xray не найден по пути {{ xray_binary_path }}
+          после установки официального release.
+
+    - name: Создать системную группу Xray
+      ansible.builtin.group:
+        name: xray
+        system: true
+        state: present
+
+    - name: Создать системного пользователя Xray
+      ansible.builtin.user:
+        name: xray
+        group: xray
+        system: true
+        create_home: false
+        shell: /usr/sbin/nologin
+        state: present
+
+    - name: Создать каталог конфигурации Xray
+      ansible.builtin.file:
+        path: "{{ xray_config_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Установить systemd unit Xray
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/xray.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Xray Service
+          Documentation=https://github.com/XTLS/Xray-core
+          After=network-online.target nss-lookup.target
+          Wants=network-online.target
+
+          [Service]
+          Type=simple
+          User=xray
+          Group=xray
+          ExecStart={{ xray_binary_path }} run -config {{ xray_config_path }}
+          Restart=on-failure
+          RestartPreventExitStatus=23
+          LimitNPROC=10000
+          LimitNOFILE=1000000
+          NoNewPrivileges=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Перезапустить Xray
+
+    - name: Установить зашифрованную конфигурацию Xray
+      ansible.builtin.copy:
+        src: ../files/xray-config.json.vault
+        dest: "{{ xray_config_path }}"
+        owner: root
+        group: xray
+        mode: "0640"
+        decrypt: true
+        backup: true
+        validate: >-
+          {{ xray_binary_path }} run
+          -test
+          -config %s
+      no_log: true
+      notify: Перезапустить Xray
+
+    - name: Включить и запустить Xray
+      ansible.builtin.systemd:
+        name: xray
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Выполнить ожидающие handlers
+      ansible.builtin.meta: flush_handlers
+
+    - name: Проверить установленную конфигурацию Xray
+      ansible.builtin.command:
+        cmd: >-
+          {{ xray_binary_path }} run
+          -test
+          -config {{ xray_config_path }}
+      become_user: xray
+      register: xray_config_check
+      changed_when: false
+
+    - name: Проверить состояние сервиса Xray
+      ansible.builtin.command:
+        cmd: systemctl is-active xray
+      register: xray_service_status
+      changed_when: false
+      failed_when: false
+
+    - name: Убедиться, что Xray активен
+      ansible.builtin.assert:
+        that:
+          - xray_service_status.rc == 0
+          - xray_service_status.stdout | trim == "active"
+        fail_msg: >-
+          Xray не запустился. Проверь журнал командой:
+          journalctl -u xray -n 100 --no-pager
+
+    - name: Получить установленную версию Xray
+      ansible.builtin.command:
+        cmd: "{{ xray_binary_path }} version"
+      register: xray_installed_version
+      changed_when: false
+
+    - name: Проверить установленную версию Xray
+      ansible.builtin.assert:
+        that:
+          - >-
+            (xray_version | regex_replace('^v', ''))
+            in xray_installed_version.stdout
+        fail_msg: >-
+          Ожидалась версия {{ xray_version }}, получено:
+          {{ xray_installed_version.stdout_lines | first | default('нет вывода') }}
+
+    - name: Дождаться локального SOCKS5-порта
+      ansible.builtin.wait_for:
+        host: "{{ xray_socks_listen }}"
+        port: "{{ xray_socks_port }}"
+        state: started
+        timeout: 20
+
+    - name: Показать результат настройки
+      ansible.builtin.debug:
+        msg:
+          - "Xray {{ xray_version }} установлен и запущен."
+          - "SOCKS5 endpoint: {{ xray_socks_listen }}:{{ xray_socks_port }}"
