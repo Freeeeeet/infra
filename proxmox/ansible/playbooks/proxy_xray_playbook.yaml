@@ -185,7 +185,7 @@
 
     - name: Установить зашифрованную конфигурацию Xray
       ansible.builtin.copy:
-        src: ../files/xray-config.json.vault
+        src: ../files/xray-config-raccoon.json.vault
         dest: "{{ xray_config_path }}"
         owner: root
         group: xray

@@ -1,0 +1,93 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: flaresolverr
+  namespace: jellyfin
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: flaresolverr
+
+  template:
+    metadata:
+      labels:
+        app: flaresolverr
+
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-2
+
+      containers:
+        - name: flaresolverr
+          image: ghcr.io/flaresolverr/flaresolverr:latest
+
+          env:
+            - name: TZ
+              value: Europe/Moscow
+
+            - name: LOG_LEVEL
+              value: info
+
+            - name: LOG_HTML
+              value: "false"
+
+            - name: CAPTCHA_SOLVER
+              value: none
+
+            - name: PROXY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: flaresolverr-proxy
+                  key: url
+
+            - name: PROXY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: flaresolverr-proxy
+                  key: username
+
+            - name: PROXY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flaresolverr-proxy
+                  key: password
+
+          ports:
+            - name: http
+              containerPort: 8191
+              protocol: TCP
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
