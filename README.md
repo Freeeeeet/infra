@@ -237,7 +237,7 @@ terraform -chdir=proxmox/terraform validate
 terraform -chdir=proxmox/terraform plan
 ```
 
-Важно: Terraform root module пока также содержит Home Assistant и legacy LXC `jellyfin`/`prowlarr`. Перед `apply` обязательно прочитать план и убедиться, что он не уничтожает и не пересоздаёт существующие ресурсы. Legacy-ресурсы не являются частью описанного здесь k3s-медиастека.
+Перед `apply` обязательно прочитать план и убедиться, что он не уничтожает и не пересоздаёт существующие ресурсы.
 
 После проверки сохранить план:
 

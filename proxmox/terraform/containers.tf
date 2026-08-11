@@ -1,24 +1,6 @@
 
 locals {
   containers = {
-    jellyfin = {
-      vm_id      = 115
-      ip_address = "192.168.1.175/24"
-      cores      = 2
-      memory     = 2048
-      mount_points = [
-        {
-          volume = "/shared_data"
-          path   = "/data"
-        },
-      ]
-    },
-    prowlarr = {
-      vm_id      = 116
-      ip_address = "192.168.1.176/24"
-      cores      = 1
-      memory     = 512
-    },
     proxy-xray = {
       vm_id      = 101
       ip_address = "192.168.1.177/24"
