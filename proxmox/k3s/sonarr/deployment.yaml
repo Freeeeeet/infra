@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 
 metadata:
-  name: jellyfin
+  name: sonarr
   namespace: jellyfin
 
 spec:
@@ -14,12 +14,12 @@ spec:
 
   selector:
     matchLabels:
-      app: jellyfin
+      app: sonarr
 
   template:
     metadata:
       labels:
-        app: jellyfin
+        app: sonarr
 
     spec:
       nodeSelector:
@@ -30,40 +30,39 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
 
       containers:
-        - name: jellyfin
-          image: jellyfin/jellyfin:latest
+        - name: sonarr
+          image: lscr.io/linuxserver/sonarr:latest
 
           env:
-            - name: HTTP_PROXY
-              valueFrom:
-                secretKeyRef:
-                  name: jellyfin-proxy
-                  key: url
+            - name: PUID
+              value: "2000"
 
-            - name: HTTPS_PROXY
-              valueFrom:
-                secretKeyRef:
-                  name: jellyfin-proxy
-                  key: url
+            - name: PGID
+              value: "2000"
 
-            - name: NO_PROXY
-              value: "localhost,127.0.0.1,.svc,.svc.cluster.local,.cluster.local,10.42.0.0/16,10.43.0.0/16,192.168.1.0/24"
+            - name: TZ
+              value: Europe/Moscow
+
+            - name: UMASK
+              value: "002"
 
           ports:
             - name: http
-              containerPort: 8096
+              containerPort: 8989
               protocol: TCP
 
           volumeMounts:
             - name: config
               mountPath: /config
+
             - name: media
               mountPath: /data
 
       volumes:
         - name: config
           persistentVolumeClaim:
-            claimName: jellyfin-config
+            claimName: sonarr-config
+
         - name: media
           persistentVolumeClaim:
             claimName: media
