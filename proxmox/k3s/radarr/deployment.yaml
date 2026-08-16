@@ -1,0 +1,68 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: radarr
+  namespace: jellyfin
+
+spec:
+  replicas: 1
+
+  strategy:
+    type: Recreate
+
+  selector:
+    matchLabels:
+      app: radarr
+
+  template:
+    metadata:
+      labels:
+        app: radarr
+
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-1
+
+      securityContext:
+        fsGroup: 2000
+        fsGroupChangePolicy: OnRootMismatch
+
+      containers:
+        - name: radarr
+          image: lscr.io/linuxserver/radarr:latest
+
+          env:
+            - name: PUID
+              value: "2000"
+
+            - name: PGID
+              value: "2000"
+
+            - name: TZ
+              value: Europe/Moscow
+
+            - name: UMASK
+              value: "002"
+
+          ports:
+            - name: http
+              containerPort: 7878
+              protocol: TCP
+
+          volumeMounts:
+            - name: config
+              mountPath: /config
+
+            - name: media
+              mountPath: /data
+
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: radarr-config
+
+        - name: media
+          persistentVolumeClaim:
+            claimName: media
