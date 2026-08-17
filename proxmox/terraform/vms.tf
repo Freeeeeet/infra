@@ -5,7 +5,7 @@ locals {
       ip_address = "192.168.1.200/24"
       cores      = 2
       memory     = 4096
-      disk_size  = 30
+      disk_size  = 150
       tags       = ["k3s", "master", "managed-by-terraform"]
     }
     k3s-worker-1 = {
@@ -13,7 +13,7 @@ locals {
       ip_address = "192.168.1.201/24"
       cores      = 4
       memory     = 8192
-      disk_size  = 40
+      disk_size  = 150
       tags       = ["k3s", "worker", "managed-by-terraform"]
     }
     k3s-worker-2 = {
@@ -21,7 +21,7 @@ locals {
       ip_address = "192.168.1.202/24"
       cores      = 2
       memory     = 8192
-      disk_size  = 40
+      disk_size  = 150
       tags       = ["k3s", "worker", "managed-by-terraform"]
     },
     media-storage = {
@@ -34,7 +34,7 @@ locals {
       extra_disks = [
         {
           interface = "virtio1"
-          size      = 500
+          size      = 800
           backup    = false
         }
       ]
