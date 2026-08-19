@@ -1,0 +1,297 @@
+---
+- name: Подготовка дисков и системных зависимостей Longhorn
+  hosts: longhorn_storage
+  become: true
+  gather_facts: true
+  serial: 1
+  any_errors_fatal: true
+
+  tasks:
+    - name: Установить системные зависимости Longhorn
+      ansible.builtin.apt:
+        name:
+          - open-iscsi
+          - nfs-common
+          - e2fsprogs
+          - util-linux
+          - dmsetup
+          - cryptsetup
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+      tags:
+        - packages
+
+    - name: Включить загрузку модуля iscsi_tcp
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/longhorn.conf
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          iscsi_tcp
+      tags:
+        - packages
+
+    - name: Загрузить модуль iscsi_tcp
+      ansible.builtin.command:
+        cmd: modprobe iscsi_tcp
+      changed_when: false
+      tags:
+        - packages
+
+    - name: Включить и запустить iscsid
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: true
+        state: started
+      tags:
+        - packages
+
+    - name: Проверить существование Longhorn-устройства
+      ansible.builtin.stat:
+        path: "{{ longhorn_device }}"
+      register: longhorn_device_stat
+      tags:
+        - disk
+
+    - name: Проверить, что Longhorn-устройство является блочным
+      ansible.builtin.assert:
+        that:
+          - longhorn_device_stat.stat.exists
+          - longhorn_device_stat.stat.isblk | default(false)
+        fail_msg: >-
+          {{ longhorn_device }} отсутствует или не является блочным устройством.
+          Форматирование не выполнялось.
+      tags:
+        - disk
+
+    - name: Получить тип устройства
+      ansible.builtin.command:
+        cmd: "lsblk -dn -o TYPE {{ longhorn_device }}"
+      register: longhorn_device_type
+      changed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Проверить, что выбрано целое дисковое устройство
+      ansible.builtin.assert:
+        that:
+          - longhorn_device_type.stdout | trim == "disk"
+        fail_msg: >-
+          {{ longhorn_device }} имеет тип
+          {{ longhorn_device_type.stdout | trim }}, ожидался disk.
+      tags:
+        - disk
+
+    - name: Получить размер устройства в байтах
+      ansible.builtin.command:
+        cmd: "lsblk -dnb -o SIZE {{ longhorn_device }}"
+      register: longhorn_device_size
+      changed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Проверить ожидаемый размер Longhorn-диска
+      ansible.builtin.assert:
+        that:
+          - longhorn_device_size.stdout | trim | int >= longhorn_device_min_size_bytes
+          - longhorn_device_size.stdout | trim | int <= longhorn_device_max_size_bytes
+        fail_msg: >-
+          Размер {{ longhorn_device }} равен
+          {{ longhorn_device_size.stdout | trim }} байт.
+          Ожидался отдельный Longhorn-диск размером от
+          {{ longhorn_device_min_size_bytes }} до
+          {{ longhorn_device_max_size_bytes }} байт.
+          Форматирование остановлено.
+      tags:
+        - disk
+
+    - name: Получить дочерние разделы устройства
+      ansible.builtin.command:
+        cmd: "lsblk -nr -o NAME {{ longhorn_device }}"
+      register: longhorn_device_children
+      changed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Проверить отсутствие разделов
+      ansible.builtin.assert:
+        that:
+          - longhorn_device_children.stdout_lines | length == 1
+        fail_msg: >-
+          На {{ longhorn_device }} найдены разделы:
+          {{ longhorn_device_children.stdout_lines }}.
+          Автоматическое форматирование остановлено.
+      tags:
+        - disk
+
+    - name: Определить существующий тип файловой системы
+      ansible.builtin.command:
+        cmd: "blkid -o value -s TYPE {{ longhorn_device }}"
+      register: longhorn_existing_filesystem
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Определить существующую метку файловой системы
+      ansible.builtin.command:
+        cmd: "blkid -o value -s LABEL {{ longhorn_device }}"
+      register: longhorn_existing_label
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Проверить существующую файловую систему
+      ansible.builtin.assert:
+        that:
+          - >-
+            (
+              longhorn_existing_filesystem.stdout | trim == ""
+              and longhorn_existing_label.stdout | trim == ""
+            )
+            or
+            (
+              longhorn_existing_filesystem.stdout | trim == longhorn_filesystem
+              and longhorn_existing_label.stdout | trim
+                  == longhorn_filesystem_label
+            )
+        fail_msg: >-
+          На {{ longhorn_device }} уже обнаружена файловая система
+          '{{ longhorn_existing_filesystem.stdout | trim }}'
+          с меткой '{{ longhorn_existing_label.stdout | trim }}'.
+          Ожидался полностью пустой диск либо
+          {{ longhorn_filesystem }} с меткой
+          {{ longhorn_filesystem_label }}.
+          Данные не изменены.
+      tags:
+        - disk
+
+    - name: Проверить существующее монтирование устройства
+      ansible.builtin.command:
+        cmd: "findmnt -rn --source {{ longhorn_device }} --output TARGET"
+      register: longhorn_existing_mount
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      tags:
+        - disk
+
+    - name: Проверить точку существующего монтирования
+      ansible.builtin.assert:
+        that:
+          - >-
+            longhorn_existing_mount.stdout | trim == ""
+            or
+            longhorn_existing_mount.stdout | trim == longhorn_mount_point
+        fail_msg: >-
+          {{ longhorn_device }} уже смонтирован в
+          {{ longhorn_existing_mount.stdout | trim }},
+          ожидалось {{ longhorn_mount_point }}.
+      tags:
+        - disk
+
+    - name: Создать ext4 на полностью пустом Longhorn-диске
+      ansible.builtin.command:
+        cmd: >-
+          mkfs.ext4
+          -L {{ longhorn_filesystem_label }}
+          {{ longhorn_device }}
+      when:
+        - not ansible_check_mode
+        - longhorn_existing_filesystem.stdout | trim == ""
+        - longhorn_existing_label.stdout | trim == ""
+      register: longhorn_mkfs
+      changed_when: longhorn_mkfs.rc == 0
+      tags:
+        - disk
+
+    - name: Создать точку монтирования
+      ansible.builtin.file:
+        path: "{{ longhorn_mount_point }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags:
+        - mount
+
+    - name: Смонтировать Longhorn-диск и добавить его в fstab
+      ansible.posix.mount:
+        path: "{{ longhorn_mount_point }}"
+        src: "LABEL={{ longhorn_filesystem_label }}"
+        fstype: "{{ longhorn_filesystem }}"
+        opts: defaults,noatime
+        dump: "0"
+        passno: "2"
+        state: mounted
+      when: not ansible_check_mode
+      tags:
+        - mount
+
+    - name: Проверить итоговое монтирование
+      ansible.builtin.command:
+        cmd: >-
+          findmnt
+          --noheadings
+          --output SOURCE,FSTYPE,TARGET
+          --mountpoint {{ longhorn_mount_point }}
+      register: longhorn_mount_check
+      changed_when: false
+      when: not ansible_check_mode
+      tags:
+        - verify
+
+    - name: Проверить параметры итогового монтирования
+      ansible.builtin.assert:
+        that:
+          - longhorn_filesystem in longhorn_mount_check.stdout
+          - longhorn_mount_point in longhorn_mount_check.stdout
+        fail_msg: >-
+          {{ longhorn_mount_point }} смонтирован не так, как ожидалось:
+          {{ longhorn_mount_check.stdout }}.
+      when: not ansible_check_mode
+      tags:
+        - verify
+
+    - name: Проверить состояние iscsid
+      ansible.builtin.command:
+        cmd: systemctl is-active iscsid
+      register: longhorn_iscsid_check
+      changed_when: false
+      tags:
+        - verify
+
+    - name: Проверить, что iscsid активен
+      ansible.builtin.assert:
+        that:
+          - longhorn_iscsid_check.stdout | trim == "active"
+        fail_msg: Сервис iscsid не активен.
+      tags:
+        - verify
+
+    - name: Показать итоговое состояние Longhorn-диска
+      ansible.builtin.command:
+        cmd: >-
+          lsblk
+          -o NAME,SIZE,TYPE,FSTYPE,LABEL,UUID,MOUNTPOINTS
+          {{ longhorn_device }}
+      register: longhorn_lsblk_result
+      changed_when: false
+      when: not ansible_check_mode
+      tags:
+        - verify
+
+    - name: Вывести итоговое состояние
+      ansible.builtin.debug:
+        var: longhorn_lsblk_result.stdout_lines
+      when: not ansible_check_mode
+      tags:
+        - verify

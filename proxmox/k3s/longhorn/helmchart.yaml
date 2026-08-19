@@ -1,0 +1,31 @@
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+
+metadata:
+  name: longhorn
+  namespace: kube-system
+
+spec:
+  chart: longhorn
+  repo: https://charts.longhorn.io
+  version: v1.12.0
+
+  targetNamespace: longhorn-system
+  createNamespace: true
+  failurePolicy: abort
+
+  valuesContent: |-
+    defaultSettings:
+      defaultDataPath: /var/lib/longhorn
+      defaultReplicaCount: 2
+      defaultDataLocality: best-effort
+
+      createDefaultDiskLabeledNodes: true
+
+      replicaSoftAntiAffinity: false
+      replicaZoneSoftAntiAffinity: false
+      replicaDiskSoftAntiAffinity: false
+
+      allowVolumeCreationWithDegradedAvailability: false
+      replicaAutoBalance: least-effort

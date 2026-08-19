@@ -7,6 +7,7 @@ locals {
       memory     = 4096
       disk_size  = 150
       tags       = ["k3s", "master", "managed-by-terraform"]
+      node_name  = "glass"
     }
     k3s-worker-1 = {
       vm_id      = 203
@@ -15,6 +16,14 @@ locals {
       memory     = 8192
       disk_size  = 150
       tags       = ["k3s", "worker", "managed-by-terraform"]
+      node_name  = "glass"
+      extra_disks = [
+        {
+          interface = "virtio1"
+          size      = 80
+          backup    = false
+        }
+      ]
     }
     k3s-worker-2 = {
       vm_id      = 204
@@ -23,6 +32,15 @@ locals {
       memory     = 8192
       disk_size  = 150
       tags       = ["k3s", "worker", "managed-by-terraform"]
+      node_name  = "glass"
+
+      extra_disks = [
+        {
+          interface = "virtio1"
+          size      = 80
+          backup    = false
+        }
+      ]
     },
     media-storage = {
       vm_id      = 205
@@ -30,6 +48,7 @@ locals {
       cores      = 2
       memory     = 2048
       disk_size  = 20
+      node_name  = "glass"
 
       extra_disks = [
         {
@@ -40,7 +59,24 @@ locals {
       ]
 
       tags = ["media", "managed-by-terraform"]
-    }
+    },
+    k3s-worker-3 = {
+      vm_id      = 206
+      ip_address = "192.168.1.203/24"
+      cores      = 2
+      memory     = 4096
+      disk_size  = 75
+      tags       = ["k3s", "worker", "managed-by-terraform", "low-resource"]
+      node_name  = "node1-home"
+
+      extra_disks = [
+        {
+          interface = "virtio1"
+          size      = 100
+          backup    = false
+        }
+      ]
+    },
   }
 }
 
@@ -49,7 +85,7 @@ module "vm" {
   source   = "../../modules/base/vm"
 
   hostname        = each.key
-  node_name       = var.node_name
+  node_name       = try(each.value.node_name, var.node_name)
   cloud_image     = var.vm_cloud_image
   gateway         = var.gateway
   username        = var.vm_username

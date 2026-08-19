@@ -1,0 +1,11 @@
+---
+longhorn_device: /dev/vdb
+longhorn_mount_point: /var/lib/longhorn
+longhorn_filesystem: ext4
+longhorn_filesystem_label: longhorn
+
+# Предохранитель: ожидаем диск от 75 до 110 GiB.
+# Системные диски имеют другой размер, поэтому playbook остановится,
+# если переменная longhorn_device внезапно укажет не туда.
+longhorn_device_min_size_bytes: 80530636800
+longhorn_device_max_size_bytes: 118111600640
